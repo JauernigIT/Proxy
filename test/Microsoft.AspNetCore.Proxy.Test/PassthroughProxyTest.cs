@@ -67,7 +67,7 @@ namespace Microsoft.AspNetCore.Proxy.Test
         [InlineData("PUT", "3006")]
         [InlineData("OPTIONS", "3007")]
         [InlineData("NewHttpMethod", "3008")]
-        public async Task PassthroughReuestWithBody(string MethodType, string Port)
+        public async Task PassthroughRequestWithBody(string MethodType, string Port)
         {
             var builder = new WebHostBuilder()
                 .Configure(app =>
@@ -106,6 +106,43 @@ namespace Microsoft.AspNetCore.Proxy.Test
             Assert.True(responseContent.Wait(3000) && !responseContent.IsFaulted);
             Assert.Equal("Response Body", responseContent.Result);
             Assert.Equal(HttpStatusCode.Created, responseMessage.StatusCode);
+        }
+
+        [Theory]
+        [InlineData("GET", "3000")]
+        public async Task ApplyCustomResponseHandler(string MethodType, string Port)
+        {
+            var responseHandlerCalled = false;
+            var builder = new WebHostBuilder()
+                .Configure(app =>
+                {
+                    app.RunProxy(new ProxyOptions
+                    {
+                        Scheme = "http",
+                        Host = "localhost",
+                        Port = Port,
+                        BackChannelMessageHandler = new TestMessageHandler
+                        {
+                            Sender = req =>
+                            {
+                                var response = new HttpResponseMessage(HttpStatusCode.Created);
+                                response.Content = new StringContent("Response Body");
+                                return response;
+                            }
+                        },
+                        ResponseHandler = (next, responseMessage, context) =>
+                        {
+                            responseHandlerCalled = true;
+                        }
+                    });
+                });
+            var server = new TestServer(builder);
+
+            var requestMessage = new HttpRequestMessage(new HttpMethod(MethodType), "");
+            requestMessage.Content = new StringContent("Request Body");
+            var responseMessage = await server.CreateClient().SendAsync(requestMessage);
+
+            Assert.True(responseHandlerCalled);
         }
 
         private class TestMessageHandler : HttpMessageHandler

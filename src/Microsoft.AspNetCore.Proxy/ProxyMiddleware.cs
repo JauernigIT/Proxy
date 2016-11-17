@@ -40,15 +40,7 @@ namespace Microsoft.AspNetCore.Proxy
             // Setting default Port and Scheme if not specified
             if (string.IsNullOrEmpty(_options.Port))
             {
-                if (string.Equals(_options.Scheme, "https", StringComparison.OrdinalIgnoreCase))
-                {
-                    _options.Port = "443";
-                }
-                else
-                {
-                    _options.Port = "80";
-                }
-
+                _options.Port = string.Equals(_options.Scheme, "https", StringComparison.OrdinalIgnoreCase) ? "443" : "80";
             }
 
             if (string.IsNullOrEmpty(_options.Scheme))
@@ -87,20 +79,19 @@ namespace Microsoft.AspNetCore.Proxy
             requestMessage.Method = new HttpMethod(context.Request.Method);
             using (var responseMessage = await _httpClient.SendAsync(requestMessage, HttpCompletionOption.ResponseHeadersRead, context.RequestAborted))
             {
-                context.Response.StatusCode = (int)responseMessage.StatusCode;
-                foreach (var header in responseMessage.Headers)
+                // apply custom response handling, if requested
+                if (_options.ResponseHandler == null || _options.ResponseHandler(_next, responseMessage, context))
                 {
-                    context.Response.Headers[header.Key] = header.Value.ToArray();
-                }
+                    context.Response.StatusCode = (int)responseMessage.StatusCode;
+                    foreach (var header in responseMessage.Headers.Union(responseMessage.Content.Headers))
+                    {
+                        context.Response.Headers[header.Key] = header.Value.ToArray();
+                    }
 
-                foreach (var header in responseMessage.Content.Headers)
-                {
-                    context.Response.Headers[header.Key] = header.Value.ToArray();
+                    // SendAsync removes chunking from the response. This removes the header so it doesn't expect a chunked response.
+                    context.Response.Headers.Remove("transfer-encoding");
+                    await responseMessage.Content.CopyToAsync(context.Response.Body);
                 }
-
-                // SendAsync removes chunking from the response. This removes the header so it doesn't expect a chunked response.
-                context.Response.Headers.Remove("transfer-encoding");
-                await responseMessage.Content.CopyToAsync(context.Response.Body);
             }
         }
     }

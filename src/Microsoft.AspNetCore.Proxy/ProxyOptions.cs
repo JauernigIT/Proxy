@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
 
 using System.Net.Http;
+using Microsoft.AspNetCore.Http;
 
 namespace Microsoft.AspNetCore.Builder
 {
@@ -14,5 +15,8 @@ namespace Microsoft.AspNetCore.Builder
         public string Host { get; set; }
         public string Port { get; set; }
         public HttpMessageHandler BackChannelMessageHandler { get; set; }
+        public ResponseHandlerDelegate ResponseHandler { get; set; }
+
+        public delegate bool ResponseHandlerDelegate(RequestDelegate next, HttpResponseMessage responseMessage, HttpContext context);
     }
 }
